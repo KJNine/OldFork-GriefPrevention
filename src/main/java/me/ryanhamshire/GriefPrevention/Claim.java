@@ -479,7 +479,7 @@ public class Claim
 	public String allowAccess(Player player)
 	{
 	    //following a siege where the defender lost, the claim will allow everyone access for a time
-		if(this.doorsOpen) return null;
+		if(this.doorsOpen || this.siegeData != null) return null;
 		
 		//admin claims need adminclaims permission only.
 		if(this.isAdminClaim())
