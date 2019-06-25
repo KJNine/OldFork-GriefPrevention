@@ -62,14 +62,17 @@ import org.bukkit.metadata.MetadataValue;
 //event handlers related to blocks
 public class BlockEventHandler implements Listener 
 {
+	private GriefPrevention instance;
+	
 	//convenience reference to singleton datastore
 	private DataStore dataStore;
 	
 	private ArrayList<Material> trashBlocks;
 	
 	//constructor
-	public BlockEventHandler(DataStore dataStore)
+	public BlockEventHandler(DataStore dataStore, GriefPrevention instance)
 	{
+		this.instance = instance;
 		this.dataStore = dataStore;
 		
 		//create the list of blocks which will not trigger a warning when they're placed outside of land claims
@@ -184,9 +187,9 @@ public class BlockEventHandler implements Listener
         }
 	}
 	
-	private boolean doesAllowFireProximityInWorld(World world) {
+	private boolean doesAllowFireProximityInWorld(World world, Player player) {
 		if (GriefPrevention.instance.pvpRulesApply(world)) {
-			return GriefPrevention.instance.config_pvp_allowFireNearPlayers;
+			return GriefPrevention.instance.config_pvp_allowFireNearPlayers || instance.smpPvp.protectionCache.containsKey(player.getUniqueId()) || instance.smpPeace.peacetimeActive;
 		} else {
 			return GriefPrevention.instance.config_pvp_allowFireNearPlayers_NonPvp;
 		}
@@ -203,7 +206,7 @@ public class BlockEventHandler implements Listener
 		//FEATURE: limit fire placement, to prevent PvP-by-fire
 		
 		//if placed block is fire and pvp is off, apply rules for proximity to other players 
-		if(block.getType() == Material.FIRE && !doesAllowFireProximityInWorld(block.getWorld()))
+		if(block.getType() == Material.FIRE && !doesAllowFireProximityInWorld(block.getWorld(), player))
 		{
 			List<Player> players = block.getWorld().getPlayers();
 			for(int i = 0; i < players.size(); i++)
