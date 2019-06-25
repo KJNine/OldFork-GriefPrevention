@@ -102,6 +102,8 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.BlockIterator;
 
 import me.ryanhamshire.GriefPrevention.events.VisualizationEvent;
+import net.kjnine.smp.peacetime.SMPPeacetime;
+import net.kjnine.smp.pvpprotection.SMPPvPProtection;
 
 class PlayerEventHandler implements Listener 
 {
@@ -1461,7 +1463,7 @@ class PlayerEventHandler implements Listener
 		}
 		
 		//lava buckets can't be dumped near other players unless pvp is on
-		if(!doesAllowLavaProximityInWorld(block.getWorld()) && !player.hasPermission("griefprevention.lava"))
+		if(!doesAllowLavaProximityInWorld(block.getWorld(), player) && !player.hasPermission("griefprevention.lava"))
 		{
 			if(bucketEvent.getBucket() == Material.LAVA_BUCKET)
 			{
@@ -1509,9 +1511,9 @@ class PlayerEventHandler implements Listener
 		}
 	}
 	
-	private boolean doesAllowLavaProximityInWorld(World world) {
+	private boolean doesAllowLavaProximityInWorld(World world, Player player) {
 		if (GriefPrevention.instance.pvpRulesApply(world)) {
-			return GriefPrevention.instance.config_pvp_allowLavaNearPlayers;
+			return GriefPrevention.instance.config_pvp_allowLavaNearPlayers || instance.smpPvp.protectionCache.containsKey(player.getUniqueId()) || instance.smpPeace.peacetimeActive;
 		} else {
 			return GriefPrevention.instance.config_pvp_allowLavaNearPlayers_NonPvp;
 		}

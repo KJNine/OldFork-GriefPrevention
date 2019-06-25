@@ -32,13 +32,8 @@ import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import me.ryanhamshire.GriefPrevention.DataStore.NoTransferException;
-import me.ryanhamshire.GriefPrevention.events.PreventBlockBreakEvent;
-import me.ryanhamshire.GriefPrevention.events.SaveTrappedPlayerEvent;
-import me.ryanhamshire.GriefPrevention.metrics.MetricsHandler;
-import net.milkbowl.vault.economy.Economy;
-
 import org.bukkit.BanList;
+import org.bukkit.BanList.Type;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Chunk;
@@ -49,11 +44,11 @@ import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.Statistic;
 import org.bukkit.World;
-import org.bukkit.BanList.Type;
 import org.bukkit.World.Environment;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.command.*;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -66,6 +61,14 @@ import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.BlockIterator;
+
+import me.ryanhamshire.GriefPrevention.DataStore.NoTransferException;
+import me.ryanhamshire.GriefPrevention.events.PreventBlockBreakEvent;
+import me.ryanhamshire.GriefPrevention.events.SaveTrappedPlayerEvent;
+import me.ryanhamshire.GriefPrevention.metrics.MetricsHandler;
+import net.kjnine.smp.peacetime.SMPPeacetime;
+import net.kjnine.smp.pvpprotection.SMPPvPProtection;
+import net.milkbowl.vault.economy.Economy;
 
 public class GriefPrevention extends JavaPlugin
 {
@@ -213,6 +216,9 @@ public class GriefPrevention extends JavaPlugin
     public boolean config_logs_debugEnabled;
     public boolean config_logs_mutedChatEnabled;
     
+    public SMPPvPProtection smpPvp;
+    public SMPPeacetime smpPeace;
+    
     //ban management plugin interop settings
     public boolean config_ban_useCommand;
     public String config_ban_commandFormat;
@@ -223,7 +229,7 @@ public class GriefPrevention extends JavaPlugin
 
 	
 	//reference to the economy plugin, if economy integration is enabled
-	public static Economy economy = null;					
+	public static Economy economy = null;		
 	
 	//how far away to search from a tree trunk for its branch blocks
 	public static final int TREE_RADIUS = 5;
@@ -338,12 +344,15 @@ public class GriefPrevention extends JavaPlugin
 		//register for events
 		PluginManager pluginManager = this.getServer().getPluginManager();
 		
+		if(pluginManager.isPluginEnabled("SMPPvPProtection")) this.smpPvp = (SMPPvPProtection) pluginManager.getPlugin("SMPPvPProtection");
+		if(pluginManager.isPluginEnabled("SMPPeacetime")) this.smpPeace = (SMPPeacetime) pluginManager.getPlugin("SMPPeacetime");
+		
 		//player events
 		PlayerEventHandler playerEventHandler = new PlayerEventHandler(this.dataStore, this);
 		pluginManager.registerEvents(playerEventHandler, this);
 		
 		//block events
-		BlockEventHandler blockEventHandler = new BlockEventHandler(this.dataStore);
+		BlockEventHandler blockEventHandler = new BlockEventHandler(this.dataStore, this);
 		pluginManager.registerEvents(blockEventHandler, this);
 				
 		//entity events
