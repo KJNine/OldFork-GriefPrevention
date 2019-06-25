@@ -189,7 +189,7 @@ public class BlockEventHandler implements Listener
 	
 	private boolean doesAllowFireProximityInWorld(World world, Player player) {
 		if (GriefPrevention.instance.pvpRulesApply(world)) {
-			return GriefPrevention.instance.config_pvp_allowFireNearPlayers || instance.smpPvp.protectionCache.containsKey(player.getUniqueId()) || instance.smpPeace.peacetimeActive;
+			return GriefPrevention.instance.config_pvp_allowFireNearPlayers && !instance.smpPvp.protectionCache.containsKey(player.getUniqueId()) && !instance.smpPeace.peacetimeActive;
 		} else {
 			return GriefPrevention.instance.config_pvp_allowFireNearPlayers_NonPvp;
 		}
