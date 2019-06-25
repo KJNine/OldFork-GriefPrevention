@@ -17,7 +17,21 @@
  */
 
 package me.ryanhamshire.GriefPrevention;
-import me.ryanhamshire.GriefPrevention.events.VisualizationEvent;
+import java.net.InetAddress;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
+
 import org.bukkit.BanList;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -33,24 +47,25 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Levelled;
+import org.bukkit.block.data.Lightable;
 import org.bukkit.block.data.Waterlogged;
 import org.bukkit.command.Command;
 import org.bukkit.entity.AbstractHorse;
 import org.bukkit.entity.Animals;
 import org.bukkit.entity.Creature;
+import org.bukkit.entity.Donkey;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Fish;
 import org.bukkit.entity.Hanging;
 import org.bukkit.entity.Item;
+import org.bukkit.entity.Llama;
+import org.bukkit.entity.Mule;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Tameable;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.entity.minecart.PoweredMinecart;
 import org.bukkit.entity.minecart.StorageMinecart;
-import org.bukkit.entity.Llama;
-import org.bukkit.entity.Donkey;
-import org.bukkit.entity.Mule;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -86,20 +101,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.BlockIterator;
 
-import java.net.InetAddress;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Calendar;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
+import me.ryanhamshire.GriefPrevention.events.VisualizationEvent;
 
 class PlayerEventHandler implements Listener 
 {
@@ -1571,19 +1573,31 @@ class PlayerEventHandler implements Listener
 		//Turtle eggs
 		if(action == Action.PHYSICAL)
 		{
-			if (clickedBlockType != Material.TURTLE_EGG)
+			if (clickedBlockType != Material.TURTLE_EGG && clickedBlockType != Material.REDSTONE_ORE)
 				return;
 			playerData = this.dataStore.getPlayerData(player.getUniqueId());
 			Claim claim = this.dataStore.getClaimAt(clickedBlock.getLocation(), false, playerData.lastClaim);
 			if(claim != null)
 			{
 				playerData.lastClaim = claim;
-
-				String noAccessReason = claim.allowBreak(player, clickedBlockType);
-				if(noAccessReason != null)
-				{
-					event.setCancelled(true);
-					return;
+				
+				if(clickedBlockType == Material.TURTLE_EGG) {
+					String noAccessReason = claim.allowBreak(player, clickedBlockType);
+					if(noAccessReason != null)
+					{
+						event.setCancelled(true);
+						return;
+					}
+				} else if(clickedBlockType == Material.REDSTONE_ORE) {
+					String noAccessReason = claim.allowAccess(player);
+					if(noAccessReason != null) {
+						event.setCancelled(true);
+						Lightable rOre = (Lightable) clickedBlock.getBlockData();
+						instance.getServer().getScheduler().runTaskLater(instance, () -> {
+								rOre.setLit(false);
+						}, 1L);
+						return;
+					}
 				}
 			}
 			return;
@@ -1592,6 +1606,25 @@ class PlayerEventHandler implements Listener
 		//don't care about left-clicking on most blocks, this is probably a break action
                 if(action == Action.LEFT_CLICK_BLOCK && clickedBlock != null)
                 {
+                	if(clickedBlockType == Material.REDSTONE_ORE) {
+                		if(playerData == null) playerData = this.dataStore.getPlayerData(player.getUniqueId());
+                        Claim claim = this.dataStore.getClaimAt(clickedBlock.getLocation(), false, playerData.lastClaim);
+                        if(claim != null)
+                        {
+                            playerData.lastClaim = claim;
+
+                            String noAccessReason = claim.allowAccess(player);
+                            if(noAccessReason != null)
+                            {
+                                event.setCancelled(true);
+                                Lightable rOre = (Lightable) clickedBlock.getBlockData();
+        						instance.getServer().getScheduler().runTaskLater(instance, () -> {
+        								rOre.setLit(false);
+        						}, 1L);
+                                return;
+                            }
+                        }
+                	} else {
                         if(clickedBlock.getY() < clickedBlock.getWorld().getMaxHeight() - 1 || event.getBlockFace() != BlockFace.UP)
                         {
                             Block adjacentBlock = clickedBlock.getRelative(event.getBlockFace());
@@ -1621,6 +1654,7 @@ class PlayerEventHandler implements Listener
                         {
                             return;
                         }
+                	}
                 }
         
 		//apply rules for containers and crafting blocks
