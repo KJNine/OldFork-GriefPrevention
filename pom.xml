@@ -97,7 +97,26 @@
                     </exclusion>
                 </exclusions>
         </dependency>
-
+		<!-- SMPPvPProtection dependency -->
+		<dependency>
+				<groupId>net.kjnine.smp</groupId>
+				<artifactId>SMPPvPProtection</artifactId>
+				<version>1.0.0</version>
+				<scope>provided</scope>
+				<exclusions>
+                    <exclusion>
+                        <groupId>mysql</groupId>
+                        <artifactId>mysql-connector-java</artifactId>
+                    </exclusion>
+                </exclusions>
+		</dependency>
+		<!-- SMPPeacetime dependency -->
+		<dependency>
+				<groupId>net.kjnine.smp</groupId>
+				<artifactId>SMPPeacetime</artifactId>
+				<version>1.0.1</version>
+				<scope>provided</scope>
+		</dependency>
     </dependencies>
 
 </project>
