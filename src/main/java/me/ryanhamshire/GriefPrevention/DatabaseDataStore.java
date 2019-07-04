@@ -89,7 +89,7 @@ public class DatabaseDataStore extends DataStore
 
 			statement.execute("CREATE TABLE IF NOT EXISTS griefprevention_nextclaimid (nextid INT(15));");
 			
-			statement.execute("CREATE TABLE IF NOT EXISTS griefprevention_claimdata (id INT(15), owner VARCHAR(50), lessercorner VARCHAR(100), greatercorner VARCHAR(100), builders TEXT, containers TEXT, accessors TEXT, managers TEXT, inheritnothing BOOLEAN, parentid INT(15));");
+			statement.execute("CREATE TABLE IF NOT EXISTS griefprevention_claimdata (id INT(15), owner VARCHAR(50), lessercorner VARCHAR(100), greatercorner VARCHAR(100), builders TEXT, containers TEXT, accessors TEXT, managers TEXT, inheritnothing BOOLEAN, teambase BOOLEAN DEFAULT FALSE, parentid INT(15));");
 
 			statement.execute("CREATE TABLE IF NOT EXISTS griefprevention_playerdata (name VARCHAR(50), lastlogin DATETIME, accruedblocks INT(15), bonusblocks INT(15));");
 
@@ -117,7 +117,7 @@ public class DatabaseDataStore extends DataStore
 		}
 
 		this.updateNameSQL = "UPDATE griefprevention_playerdata SET name = ? WHERE name = ?;";
-		this.insertClaimSQL = "INSERT INTO griefprevention_claimdata (id, owner, lessercorner, greatercorner, builders, containers, accessors, managers, inheritnothing, parentid) VALUES(?,?,?,?,?,?,?,?,?,?);";
+		this.insertClaimSQL = "INSERT INTO griefprevention_claimdata (id, owner, lessercorner, greatercorner, builders, containers, accessors, managers, inheritnothing, teambase, parentid) VALUES(?,?,?,?,?,?,?,?,?,?,?);";
 		this.deleteClaimSQL = "DELETE FROM griefprevention_claimdata WHERE id=?;";
 		this.getPlayerDataSQL = "SELECT * FROM griefprevention_playerdata WHERE name=?;";
 		this.deletePlayerDataSQL = "DELETE FROM griefprevention_playerdata WHERE name=?;";
@@ -273,6 +273,7 @@ public class DatabaseDataStore extends DataStore
 				long parentId = results.getLong("parentid");
 				claimID = results.getLong("id");
 				boolean inheritNothing = results.getBoolean("inheritNothing");
+				boolean teambase = results.getBoolean("teambase");
 				Location lesserBoundaryCorner = null;
 				Location greaterBoundaryCorner = null;
 				String lesserCornerString = "(location not available)";
@@ -342,7 +343,7 @@ public class DatabaseDataStore extends DataStore
 				String managersString = results.getString("managers");
 				List<String> managerNames = Arrays.asList(managersString.split(";"));
 				managerNames = this.convertNameListToUUIDList(managerNames);
-				Claim claim = new Claim(lesserBoundaryCorner, greaterBoundaryCorner, ownerID, builderNames, containerNames, accessorNames, managerNames, inheritNothing, claimID);
+				Claim claim = new Claim(lesserBoundaryCorner, greaterBoundaryCorner, ownerID, builderNames, containerNames, accessorNames, managerNames, inheritNothing, teambase, claimID);
 
 				if(removeClaim)
 				{
@@ -426,6 +427,7 @@ public class DatabaseDataStore extends DataStore
 		String lesserCornerString = this.locationToString(claim.getLesserBoundaryCorner());
 		String greaterCornerString = this.locationToString(claim.getGreaterBoundaryCorner());
 		String owner = "";
+		boolean teamBase = claim.isTeamBase();
 		if(claim.ownerID != null) owner = claim.ownerID.toString();
 
 		ArrayList<String> builders = new ArrayList<String>();
@@ -453,7 +455,8 @@ public class DatabaseDataStore extends DataStore
 			insertStmt.setString(7, accessorsString);
 			insertStmt.setString(8, managersString);
 			insertStmt.setBoolean(9, inheritNothing);
-			insertStmt.setLong(10, parentId);
+			insertStmt.setBoolean(10, teamBase);
+			insertStmt.setLong(11, parentId);
 			insertStmt.executeUpdate();
 		}
 		catch(SQLException e)

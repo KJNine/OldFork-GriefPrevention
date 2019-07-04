@@ -60,6 +60,8 @@ import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
 import org.bukkit.util.BlockIterator;
 
 import me.ryanhamshire.GriefPrevention.DataStore.NoTransferException;
@@ -86,6 +88,7 @@ public class GriefPrevention extends JavaPlugin
     
     //log entry manager for GP's custom log files
     CustomLogger customLogger;
+    
 	
 	//configuration variables, loaded/saved from a config.yml
 	
@@ -218,6 +221,7 @@ public class GriefPrevention extends JavaPlugin
     
     public SMPPvPProtection smpPvp;
     public SMPPeacetime smpPeace;
+    private Scoreboard mainSb;
     
     //ban management plugin interop settings
     public boolean config_ban_useCommand;
@@ -346,6 +350,8 @@ public class GriefPrevention extends JavaPlugin
 		
 		if(pluginManager.isPluginEnabled("SMPPvPProtection")) this.smpPvp = (SMPPvPProtection) pluginManager.getPlugin("SMPPvPProtection");
 		if(pluginManager.isPluginEnabled("SMPPeacetime")) this.smpPeace = (SMPPeacetime) pluginManager.getPlugin("SMPPeacetime");
+		
+		mainSb = getServer().getScoreboardManager().getMainScoreboard();
 		
 		//player events
 		PlayerEventHandler playerEventHandler = new PlayerEventHandler(this.dataStore, this);
@@ -2126,6 +2132,30 @@ public class GriefPrevention extends JavaPlugin
                 return true;
             }
         }
+		//guidebook
+        else if(cmd.getName().equalsIgnoreCase("guidebook"))
+        {
+            WelcomeTask task = new WelcomeTask(player);
+            task.run();
+            return true;
+        }
+		//teambase
+        else if(cmd.getName().equalsIgnoreCase("teambase"))
+        {
+        	Claim claim = this.dataStore.getClaimAt(player.getLocation(), true /*ignore height*/, null);
+        	if(claim == null || !player.getUniqueId().equals(claim.ownerID) || claim.isAdminClaim()) {
+        		GriefPrevention.sendMessage(player, TextMode.Err, Messages.NotYourClaim);
+        		return true;
+        	}
+        	if(!player.hasPermission("griefprevention.oneextraclaim")) {
+        		GriefPrevention.sendMessage(player, TextMode.Err, Messages.NoPermissionForCommand);
+        		return true;
+        	}
+        	claim.setTeamBase(true);
+    		GriefPrevention.sendMessage(player, TextMode.Success, "Successfully Set Current Claim as Team Base.");
+        	this.dataStore.saveClaim(claim);
+        	return true;
+        }
 		
 		//claimslist or claimslist <player>
 		else if(cmd.getName().equalsIgnoreCase("claimslist"))
@@ -2471,11 +2501,12 @@ public class GriefPrevention extends JavaPlugin
 			}
 			
 			//can't start a siege when you're protected from pvp combat
-			if(attackerData.pvpImmune)
+			if(attackerData.pvpImmune || smpPvp.protectionCache.containsKey(attacker.getUniqueId()))
 			{
 				GriefPrevention.sendMessage(player, TextMode.Err, Messages.CantFightWhileImmune);
 				return true;
 			}
+			
 			
 			//if a player name was specified, use that
 			Player defender = null;
@@ -2504,19 +2535,37 @@ public class GriefPrevention extends JavaPlugin
 				return false;
 			}
 
-                        // First off, you cannot siege yourself, that's just
-                        // silly:
-                        if (attacker.getName().equals( defender.getName() )) {
-                            GriefPrevention.sendMessage(player, TextMode.Err, Messages.NoSiegeYourself);
-                            return true;
-                        }
+            // First off, you cannot siege yourself, that's just
+            // silly:
+            if (attacker.getName().equals( defender.getName() )) {
+                GriefPrevention.sendMessage(player, TextMode.Err, Messages.NoSiegeYourself);
+                return true;
+            }
+            
+            Team attTeam = mainSb.getEntryTeam(attacker.getName());
+            Team defTeam = mainSb.getEntryTeam(defender.getName());
+            if(attTeam == null) {
+            	GriefPrevention.sendMessage(player, TextMode.Err, "You cannot Siege while Teamless.");
+            	return true;
+            }
+            if(defTeam == null) {
+            	GriefPrevention.sendMessage(player, TextMode.Err, "That Player is Teamless and therefore cannot be sieged.");
+            	return true;
+            }
+            
+            if(attTeam.getName().equals(defTeam.getName())) {
+            	GriefPrevention.sendMessage(player, TextMode.Err, "You cannot Siege your teammates.");
+            	return true;
+            }
+            
 			
 			//victim must not have the permission which makes him immune to siege
-			if(defender.hasPermission("griefprevention.siegeimmune"))
+			/* annoying - KJNine
+                        if(defender.hasPermission("griefprevention.siegeimmune"))
 			{
 			    GriefPrevention.sendMessage(player, TextMode.Err, Messages.SiegeImmune);
                 return true;
-			}
+			} */
 			
 			//victim must not be under siege already
 			PlayerData defenderData = this.dataStore.getPlayerData(defender.getUniqueId());
@@ -2530,6 +2579,11 @@ public class GriefPrevention extends JavaPlugin
 			if(defenderData.pvpImmune)
 			{
 				GriefPrevention.sendMessage(player, TextMode.Err, Messages.NoSiegeDefenseless);
+				return true;
+			}
+			
+			if(smpPvp.protectionCache.containsKey(defender.getUniqueId())) {
+				GriefPrevention.sendMessage(player, TextMode.Err, "You cannot siege that player, they are currently PvP Protected.");
 				return true;
 			}
 			
@@ -2564,7 +2618,7 @@ public class GriefPrevention extends JavaPlugin
 			}
 			
 			//can't be on cooldown
-			if(dataStore.onCooldown(attacker, defender, defenderClaim))
+			if(dataStore.onCooldown(attacker, defender, defenderClaim) || smpPeace.peacetimeActive)
 			{
 				GriefPrevention.sendMessage(player, TextMode.Err, Messages.SiegeOnCooldown);
 				return true;
@@ -2576,6 +2630,17 @@ public class GriefPrevention extends JavaPlugin
 			//confirmation message for attacker, warning message for defender
 			GriefPrevention.sendMessage(defender, TextMode.Warn, Messages.SiegeAlert, attacker.getName());
 			GriefPrevention.sendMessage(player, TextMode.Success, Messages.SiegeConfirmed, defender.getName());
+			
+			if(defenderClaim.isTeamBase()) {
+				for(String ent : defTeam.getEntries()) {
+					Player teammate = getServer().getPlayer(ent);
+					if(teammate != null) {
+						teammate.sendTitle(ChatColor.translateAlternateColorCodes('&', defTeam.getColor() + "&l!!! &6Under Siege" + defTeam.getColor() + "&l !!!"), "&eYour TeamBase is Under Siege", 5, 80, 20);
+					}
+				}
+			} else
+				defender.sendTitle(ChatColor.translateAlternateColorCodes('&', "&c&l!!! &6Under Siege&c&l !!!"), "&eYour Base is Under Siege", 5, 110, 20);
+			
 
 			return true;
 		}

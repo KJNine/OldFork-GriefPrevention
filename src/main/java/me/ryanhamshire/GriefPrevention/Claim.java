@@ -18,14 +18,28 @@
 
 package me.ryanhamshire.GriefPrevention;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
-import org.bukkit.*;
+import org.bukkit.Chunk;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.World.Environment;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
 
 //represents a player claim
 //creating an instance doesn't make an effective claim
@@ -46,6 +60,8 @@ public class Claim
 	//ownerID.  for admin claims, this is NULL
 	//use getOwnerName() to get a friendly name (will be "an administrator" for admin claims)
 	public UUID ownerID;
+	
+	private boolean teamBase;
 	
 	//list of players who (beyond the claim owner) have permission to grant permissions in this claim
 	public ArrayList<String> managers = new ArrayList<String>();
@@ -106,7 +122,7 @@ public class Claim
 	{
 		if(this.isAdminClaim()) return false;
 		
-		if(this.allowAccess(defender) != null) return false;
+		//if(this.allowAccess(defender) != null) return false;
 		
 		return true;
 	}
@@ -190,7 +206,7 @@ public class Claim
 	}
 	
 	//main constructor.  note that only creating a claim instance does nothing - a claim must be added to the data store to be effective
-	Claim(Location lesserBoundaryCorner, Location greaterBoundaryCorner, UUID ownerID, List<String> builderIDs, List<String> containerIDs, List<String> accessorIDs, List<String> managerIDs, boolean inheritNothing, Long id)
+	Claim(Location lesserBoundaryCorner, Location greaterBoundaryCorner, UUID ownerID, List<String> builderIDs, List<String> containerIDs, List<String> accessorIDs, List<String> managerIDs, boolean inheritNothing, boolean teambase, Long id)
 	{
 		//modification date
 		this.modifiedDate = Calendar.getInstance().getTime();
@@ -201,6 +217,8 @@ public class Claim
 		//store corners
 		this.lesserBoundaryCorner = lesserBoundaryCorner;
 		this.greaterBoundaryCorner = greaterBoundaryCorner;
+		
+		this.teamBase = teambase;
 		
 		//owner
 		this.ownerID = ownerID;
@@ -241,9 +259,9 @@ public class Claim
 		this.inheritNothing = inheritNothing;
 	}
 
-	Claim(Location lesserBoundaryCorner, Location greaterBoundaryCorner, UUID ownerID, List<String> builderIDs, List<String> containerIDs, List<String> accessorIDs, List<String> managerIDs, Long id)
+	Claim(Location lesserBoundaryCorner, Location greaterBoundaryCorner, UUID ownerID, List<String> builderIDs, List<String> containerIDs, List<String> accessorIDs, List<String> managerIDs, boolean teambase, Long id)
 	{
-		this(lesserBoundaryCorner, greaterBoundaryCorner, ownerID, builderIDs, containerIDs, accessorIDs, managerIDs, false, id);
+		this(lesserBoundaryCorner, greaterBoundaryCorner, ownerID, builderIDs, containerIDs, accessorIDs, managerIDs, false, teambase, id);
 	}
 	
 	//measurements.  all measurements are in blocks
@@ -281,7 +299,7 @@ public class Claim
 		Claim claim = new Claim
 			(new Location(this.lesserBoundaryCorner.getWorld(), this.lesserBoundaryCorner.getBlockX() - howNear, this.lesserBoundaryCorner.getBlockY(), this.lesserBoundaryCorner.getBlockZ() - howNear),
 			 new Location(this.greaterBoundaryCorner.getWorld(), this.greaterBoundaryCorner.getBlockX() + howNear, this.greaterBoundaryCorner.getBlockY(), this.greaterBoundaryCorner.getBlockZ() + howNear),
-			 null, new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), null);
+			 null, new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), false, null);
 		
 		return claim.contains(location, false, true);
 	}
@@ -456,12 +474,21 @@ public class Claim
 				}
 			}
 			
+			Scoreboard sb = GriefPrevention.instance.getServer().getScoreboardManager().getMainScoreboard();
+			
+			boolean teammate = false;
+			
+			Team ownerTeam = sb.getEntryTeam(this.getOwnerName());
+			if(ownerTeam != null) {
+				if(ownerTeam.hasEntry(player.getName())) teammate = true;
+			}
+			
 			//custom error messages for siege mode
 			if(!breakable)
 			{
 				return GriefPrevention.instance.dataStore.getMessage(Messages.NonSiegeMaterial);
 			}
-			else if(player.getUniqueId().equals(this.ownerID))
+			else if(player.getUniqueId().equals(this.ownerID) || teammate)
 			{
 				return GriefPrevention.instance.dataStore.getMessage(Messages.NoOwnerBuildUnderSiege);
 			}
@@ -479,6 +506,7 @@ public class Claim
 	public String allowAccess(Player player)
 	{
 	    //following a siege where the defender lost, the claim will allow everyone access for a time
+		// + KJNine: during a siege, allow access
 		if(this.doorsOpen || this.siegeData != null) return null;
 		
 		//admin claims need adminclaims permission only.
@@ -965,5 +993,13 @@ public class Claim
 		}
 		
 		return hashes;
+    }
+    
+    public boolean isTeamBase() {
+    	return teamBase;
+    }
+    
+    public void setTeamBase(boolean teamBase) {
+    	this.teamBase = teamBase;
     }
 }
