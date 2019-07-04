@@ -219,6 +219,12 @@ commands:
       description: Gives a player a manual about claiming land.
       usage: /ClaimBook <player>
       permission: griefprevention.claimbook
+    guidebook:
+      description: Gives a player a manual about the server.
+      usage: /GuideBook
+    teambase:
+      description: Sets a claim as a team base.
+      usage: /TeamBase
 permissions:
     griefprevention.createclaims:
         description: Grants permission to create claims.
