@@ -687,12 +687,8 @@ class PlayerEventHandler implements Listener
 			//may need pvp protection
 		    instance.checkPvpProtectionNeeded(player);
 		    
-		    //if in survival claims mode, send a message about the claim basics video (except for admins - assumed experts)
-		    if(instance.config_claims_worldModes.get(player.getWorld()) == ClaimsMode.Survival && !player.hasPermission("griefprevention.adminclaims") && this.dataStore.claims.size() > 10)
-		    {
-		        WelcomeTask task = new WelcomeTask(player);
-		        Bukkit.getScheduler().scheduleSyncDelayedTask(instance, task, instance.config_claims_manualDeliveryDelaySeconds * 20L);
-		    }
+		    WelcomeTask task = new WelcomeTask(player);
+		    Bukkit.getScheduler().scheduleSyncDelayedTask(instance, task, instance.config_claims_manualDeliveryDelaySeconds * 20L);
 		}
 		
 		//silence notifications when they're coming too fast
@@ -1461,7 +1457,7 @@ class PlayerEventHandler implements Listener
 		}
 		
 		//lava buckets can't be dumped near other players unless pvp is on
-		if(!doesAllowLavaProximityInWorld(block.getWorld(), player) && !player.hasPermission("griefprevention.lava"))
+		if(true /* KJNine - used to be doesAllowLavaProximityInWorld */)
 		{
 			if(bucketEvent.getBucket() == Material.LAVA_BUCKET)
 			{
@@ -1470,12 +1466,16 @@ class PlayerEventHandler implements Listener
 				{
 					Player otherPlayer = players.get(i);
 					Location location = otherPlayer.getLocation();
-					if(!otherPlayer.equals(player) && otherPlayer.getGameMode() == GameMode.SURVIVAL && player.canSee(otherPlayer) && block.getY() >= location.getBlockY() - 1 && location.distanceSquared(block.getLocation()) < minLavaDistance * minLavaDistance)
-					{
+					if (!otherPlayer.equals(player) && otherPlayer.getGameMode() == GameMode.SURVIVAL
+							&& player.canSee(otherPlayer) && block.getY() >= location.getBlockY() - 1
+							&& location.distanceSquared(block.getLocation()) < minLavaDistance * minLavaDistance
+							&& (instance.smpPvp.protectionCache.containsKey(otherPlayer.getUniqueId())
+							|| instance.smpPvp.protectionCache.containsKey(player.getUniqueId())
+							|| instance.smpPeace.peacetimeActive)) {
 						instance.sendMessage(player, TextMode.Err, Messages.NoLavaNearOtherPlayer, "another player");
 						bucketEvent.setCancelled(true);
 						return;
-					}					
+					}
 				}
 			}
 		}
@@ -1511,7 +1511,7 @@ class PlayerEventHandler implements Listener
 	
 	private boolean doesAllowLavaProximityInWorld(World world, Player player) {
 		if (GriefPrevention.instance.pvpRulesApply(world)) {
-			return GriefPrevention.instance.config_pvp_allowLavaNearPlayers && !instance.smpPvp.protectionCache.containsKey(player.getUniqueId()) && !instance.smpPeace.peacetimeActive;
+			return GriefPrevention.instance.config_pvp_allowLavaNearPlayers;
 		} else {
 			return GriefPrevention.instance.config_pvp_allowLavaNearPlayers_NonPvp;
 		}
@@ -2514,7 +2514,8 @@ class PlayerEventHandler implements Listener
 				//if he's at the claim count per player limit already and doesn't have permission to bypass, display an error message
 				if(instance.config_claims_maxClaimsPerPlayer > 0 &&
 				   !player.hasPermission("griefprevention.overrideclaimcountlimit") &&
-				   playerData.getClaims().size() >= instance.config_claims_maxClaimsPerPlayer)
+				   playerData.getClaims().size() >= instance.config_claims_maxClaimsPerPlayer &&
+				   (!player.hasPermission("griefprevention.oneextraclaim") || playerData.getClaims().size() >= 2))
 				{
 				    instance.sendMessage(player, TextMode.Err, Messages.ClaimCreationFailedOverClaimCountLimit);
 				    return;
@@ -2525,7 +2526,7 @@ class PlayerEventHandler implements Listener
 				instance.sendMessage(player, TextMode.Instr, Messages.ClaimStart);
 
 				//show him where he's working
-                Claim newClaim = new Claim(clickedBlock.getLocation(), clickedBlock.getLocation(), null, new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), null);
+                Claim newClaim = new Claim(clickedBlock.getLocation(), clickedBlock.getLocation(), null, new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), false, null);
 				Visualization visualization = Visualization.FromClaim(newClaim, clickedBlock.getY(), VisualizationType.RestoreNature, player.getLocation());
 
                 // alert plugins of a visualization
