@@ -53,12 +53,16 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Tameable;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.scoreboard.Objective;
+import org.bukkit.scoreboard.Score;
+import org.bukkit.scoreboard.Team;
 
 import com.google.common.io.Files;
 
 import me.ryanhamshire.GriefPrevention.events.ClaimCreatedEvent;
 import me.ryanhamshire.GriefPrevention.events.ClaimDeletedEvent;
 import me.ryanhamshire.GriefPrevention.events.ClaimModifiedEvent;
+import net.kjnine.smp.pvpprotection.MSG;
 
 //singleton class which manages all GriefPrevention data (except for config options)
 public abstract class DataStore 
@@ -1029,9 +1033,11 @@ public abstract class DataStore
 		siegeData.checkupTaskID = GriefPrevention.instance.getServer().getScheduler().scheduleSyncDelayedTask(GriefPrevention.instance, task, 20L * 30);
 	}
 	
-	//ends a siege
-	//either winnerName or loserName can be null, but not both
-	synchronized public void endSiege(SiegeData siegeData, String winnerName, String loserName, List<ItemStack> drops)
+	/**ends a siege
+	 * either winnerName or loserName can be null, but not both
+	 * reason is 0 for flee, 1 for kill
+	 */
+	synchronized public void endSiege(SiegeData siegeData, String winnerName, String loserName, List<ItemStack> drops, int reason)
 	{
 		boolean grantAccess = false;
 		
@@ -1060,9 +1066,52 @@ public abstract class DataStore
 		}
 		
 		//if the attacker won, plan to open the doors for looting
+		Objective obj = siegeData.defender.getScoreboard().getObjective("TeamScore");
+		Team defTeam = siegeData.defender.getScoreboard().getEntryTeam(siegeData.defender.getName());
+		Team attTeam = siegeData.attacker.getScoreboard().getEntryTeam(siegeData.attacker.getName());
 		if(siegeData.attacker.getName().equals(winnerName))
 		{
 			grantAccess = true;
+			if(obj != null && attTeam != null) {
+				Score attScore = obj.getScore(attTeam.getName());
+				int points = 1;
+				if(reason == 0) points += 2;
+				if(!attScore.isScoreSet())
+					attScore.setScore(points);
+				else attScore.setScore(attScore.getScore() + points);
+				Set<String> kpl = attTeam.getEntries();
+				for(Player o : GriefPrevention.instance.getServer().getOnlinePlayers()) {
+					if(kpl.contains(o.getName()))
+						MSG.send(siegeData.defender, "&f-> " + attTeam.getColor() + "[" + attTeam.getDisplayName()
+							+ "] &f+" + points + " Score for successfully winning siege " + (reason == 0 ? "(Defender Fled, &6+2&f) ": "") + "against " + siegeData.defender.getDisplayName() + "&f, sieged by " + siegeData.attacker.getDisplayName());
+				}
+			} if(obj != null && defTeam != null && reason == 0) {
+				Score defScore = obj.getScore(defTeam.getName());
+				if(!defScore.isScoreSet())
+					defScore.setScore(-2);
+				else defScore.setScore(defScore.getScore() - 2);
+				Set<String> kpl = defTeam.getEntries();
+				for(Player o : GriefPrevention.instance.getServer().getOnlinePlayers()) {
+					if(kpl.contains(o.getName()))
+						MSG.send(siegeData.defender, "&f-> " + defTeam.getColor() + "[" + defTeam.getDisplayName()
+							+ "] &f-2 Score for fleeing a siege against " + siegeData.defender.getDisplayName() + "&f, sieged by " + siegeData.attacker.getDisplayName());
+				}
+			}
+		} else {
+			if(obj != null && defTeam != null) {
+				Score defScore = obj.getScore(defTeam.getName());
+				int points = 2;
+				if(!defScore.isScoreSet())
+					defScore.setScore(points);
+				else defScore.setScore(defScore.getScore() + points);
+				Set<String> kpl = defTeam.getEntries();
+				for(Player o : GriefPrevention.instance.getServer().getOnlinePlayers()) {
+					if(kpl.contains(o.getName()))
+						MSG.send(siegeData.defender, "&f-> " + defTeam.getColor() + "[" + defTeam.getDisplayName()
+							+ "] &f+" + points + " Score for successfully defending siege against " + siegeData.defender.getDisplayName() + "&f, sieged by " + siegeData.attacker.getDisplayName());
+				}
+			}
+			
 		}
 		
 		PlayerData attackerData = this.getPlayerData(siegeData.attacker.getUniqueId());
@@ -1075,14 +1124,14 @@ public abstract class DataStore
 		//start a cooldown for this attacker/defender pair
 		Long now = Calendar.getInstance().getTimeInMillis();
 		Long cooldownEnd = now + 1000 * 60 * GriefPrevention.instance.config_siege_cooldownEndInMinutes;  //one hour from now
-		this.siegeCooldownRemaining.put(siegeData.attacker.getName() + "_" + siegeData.defender.getName(), cooldownEnd);
+		this.siegeCooldownRemaining.put(siegeData.defender.getName(), cooldownEnd);
 		
 		//start cooldowns for every attacker/involved claim pair
 		for(int i = 0; i < siegeData.claims.size(); i++)
 		{
 			Claim claim = siegeData.claims.get(i);
 			claim.siegeData = null;
-			this.siegeCooldownRemaining.put(siegeData.attacker.getName() + "_" + claim.getOwnerName(), cooldownEnd);
+			this.siegeCooldownRemaining.put(claim.getOwnerName(), cooldownEnd);
 			
 			//if doors should be opened for looting, do that now
 			if(grantAccess)
@@ -1160,9 +1209,9 @@ public abstract class DataStore
 		Long cooldownEnd = null;
 		
 		//look for an attacker/defender cooldown
-		if(this.siegeCooldownRemaining.get(attacker.getName() + "_" + defender.getName()) != null)
+		if(this.siegeCooldownRemaining.get(defender.getName()) != null)
 		{
-			cooldownEnd = this.siegeCooldownRemaining.get(attacker.getName() + "_" + defender.getName());
+			cooldownEnd = this.siegeCooldownRemaining.get(defender.getName());
 			
 			if(Calendar.getInstance().getTimeInMillis() < cooldownEnd)
 			{
@@ -1170,7 +1219,7 @@ public abstract class DataStore
 			}
 			
 			//if found but expired, remove it
-			this.siegeCooldownRemaining.remove(attacker.getName() + "_" + defender.getName());
+			this.siegeCooldownRemaining.remove(defender.getName());
 		}
 		
 		//look for genderal defender cooldown
@@ -1185,9 +1234,9 @@ public abstract class DataStore
         }
 		
 		//look for an attacker/claim cooldown
-		if(cooldownEnd == null && this.siegeCooldownRemaining.get(attacker.getName() + "_" + defenderClaim.getOwnerName()) != null)
+		if(cooldownEnd == null && this.siegeCooldownRemaining.get(defenderClaim.getOwnerName()) != null)
 		{
-			cooldownEnd = this.siegeCooldownRemaining.get(attacker.getName() + "_" + defenderClaim.getOwnerName());
+			cooldownEnd = this.siegeCooldownRemaining.get(defenderClaim.getOwnerName());
 			
 			if(Calendar.getInstance().getTimeInMillis() < cooldownEnd)
 			{
@@ -1195,7 +1244,7 @@ public abstract class DataStore
 			}
 			
 			//if found but expired, remove it
-			this.siegeCooldownRemaining.remove(attacker.getName() + "_" + defenderClaim.getOwnerName());			
+			this.siegeCooldownRemaining.remove(defenderClaim.getOwnerName());			
 		}
 		
 		return false;
@@ -1220,6 +1269,13 @@ public abstract class DataStore
 		
 		//otherwise extend the siege
 		playerData.siegeData.claims.add(claim);
+		
+		for(Player p : GriefPrevention.instance.getServer().getOnlinePlayers()) {
+			if(claim.contains(p.getLocation(), true, false)) {
+				MSG.send(p, "&6&l!&4&l!&6&l! &cPvP is now enabled in this area (Under Siege) &6&l!&4&l!&6&l!");
+			}
+		}
+		
 		claim.siegeData = playerData.siegeData;
 	}		
 	

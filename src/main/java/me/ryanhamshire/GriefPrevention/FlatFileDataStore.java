@@ -509,6 +509,8 @@ public class FlatFileDataStore extends DataStore
             }
         }
         
+        boolean teambase = yaml.getBoolean("Teambase");
+        
         List<String> builders = yaml.getStringList("Builders");
         
         List<String> containers = yaml.getStringList("Containers");
@@ -522,7 +524,7 @@ public class FlatFileDataStore extends DataStore
         out_parentID.add(yaml.getLong("Parent Claim ID", -1L));
         
         //instantiate
-        claim = new Claim(lesserBoundaryCorner, greaterBoundaryCorner, ownerID, builders, containers, accessors, managers, inheritNothing, false, claimID);
+        claim = new Claim(lesserBoundaryCorner, greaterBoundaryCorner, ownerID, builders, containers, accessors, managers, inheritNothing, teambase, claimID);
         claim.modifiedDate = new Date(lastModifiedDate);
         claim.id = claimID;
         
@@ -541,6 +543,7 @@ public class FlatFileDataStore extends DataStore
         String ownerID = "";
         if(claim.ownerID != null) ownerID = claim.ownerID.toString();
         yaml.set("Owner", ownerID);
+        yaml.set("Teambase", claim.isTeamBase());
         
         ArrayList<String> builders = new ArrayList<String>();
         ArrayList<String> containers = new ArrayList<String>();

@@ -496,7 +496,7 @@ public class EntityEventHandler implements Listener
 		if(playerData.siegeData != null)
 		{
 			//end it, with the dieing player being the loser
-			this.dataStore.endSiege(playerData.siegeData, null, player.getName(), event.getDrops());
+			this.dataStore.endSiege(playerData.siegeData, null, player.getName(), event.getDrops(), 1);
 		}
 		
 		//FEATURE: lock dropped items to player who dropped them
@@ -847,6 +847,32 @@ public class EntityEventHandler implements Listener
                         }
                     }
                 }
+                boolean pvpOnlyInClaimsSiege = true;
+                if(pvpOnlyInClaimsSiege) {
+                	// SMP Addition: PvP ONLY outside claims or during siege
+                	Claim attackerClaim = this.dataStore.getClaimAt(attacker.getLocation(), false, attackerData.lastClaim);
+                    if(!attackerData.ignoreClaims)
+                    {
+                        if(attackerClaim != null) { 
+                        	if(attackerClaim.siegeData == null && !defenderData.inPvpCombat()) {
+	                            event.setCancelled(true);
+	                            if(sendErrorMessagesToPlayers) GriefPrevention.sendMessage(attacker, TextMode.Err, "You cannot PvP inside land claims unless during siege.");
+	                            return;
+	                        }
+                        }
+                        
+                        Claim defenderClaim = this.dataStore.getClaimAt(defender.getLocation(), false, defenderData.lastClaim);
+                        if(defenderClaim != null) {
+                        	if(defenderClaim.siegeData == null && !defenderData.inPvpCombat()) {
+                                event.setCancelled(true);
+                                if(sendErrorMessagesToPlayers) GriefPrevention.sendMessage(attacker, TextMode.Err, "You cannot PvP inside land claims unless during siege.");
+                                return;
+                        	}
+                        }
+                    }
+                }
+                
+                
             }
         }
         
@@ -1307,7 +1333,10 @@ public class EntityEventHandler implements Listener
 	                PlayerData defenderData = this.dataStore.getPlayerData(effectedPlayer.getUniqueId());
 	                PlayerData attackerData = this.dataStore.getPlayerData(thrower.getUniqueId());
 	                Claim attackerClaim = this.dataStore.getClaimAt(thrower.getLocation(), false, attackerData.lastClaim);
-	                if(attackerClaim != null && GriefPrevention.instance.claimIsPvPSafeZone(attackerClaim))
+	                if((attackerClaim != null && (GriefPrevention.instance.claimIsPvPSafeZone(attackerClaim) || attackerClaim.siegeData == null))
+                		|| GriefPrevention.instance.smpPeace.peacetimeActive
+                		|| GriefPrevention.instance.smpPvp.protectionCache.containsKey(thrower.getUniqueId())
+                		|| GriefPrevention.instance.smpPvp.protectionCache.containsKey(effectedPlayer.getUniqueId()))
 	                {
 	                    attackerData.lastClaim = attackerClaim;
 	                    PreventPvPEvent pvpEvent = new PreventPvPEvent(attackerClaim);
@@ -1321,7 +1350,10 @@ public class EntityEventHandler implements Listener
 	                }
 	                
 	                Claim defenderClaim = this.dataStore.getClaimAt(effectedPlayer.getLocation(), false, defenderData.lastClaim);
-	                if(defenderClaim != null && GriefPrevention.instance.claimIsPvPSafeZone(defenderClaim))
+	                if((defenderClaim != null && (GriefPrevention.instance.claimIsPvPSafeZone(defenderClaim) || defenderClaim.siegeData == null))
+	                		|| GriefPrevention.instance.smpPeace.peacetimeActive
+	                		|| GriefPrevention.instance.smpPvp.protectionCache.containsKey(thrower.getUniqueId())
+	                		|| GriefPrevention.instance.smpPvp.protectionCache.containsKey(effectedPlayer.getUniqueId()))
 	                {
 	                    defenderData.lastClaim = defenderClaim;
 	                    PreventPvPEvent pvpEvent = new PreventPvPEvent(defenderClaim);

@@ -86,6 +86,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerLoginEvent.Result;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -99,6 +100,7 @@ import org.bukkit.metadata.MetadataValue;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scoreboard.Team;
 import org.bukkit.util.BlockIterator;
 
 import me.ryanhamshire.GriefPrevention.events.VisualizationEvent;
@@ -947,7 +949,9 @@ class PlayerEventHandler implements Listener
 		}
 		
 		//FEATURE: players in pvp combat when they log out will die
-        if(instance.config_pvp_punishLogout && playerData.inPvpCombat())
+        if(instance.config_pvp_punishLogout && playerData.inPvpCombat()
+        		&& !GriefPrevention.instance.smpPeace.peacetimeActive
+        		&& !GriefPrevention.instance.smpPvp.protectionCache.containsKey(player.getUniqueId()))
         {
             player.setHealth(0);
         }
@@ -1059,6 +1063,77 @@ class PlayerEventHandler implements Listener
         }
 	}
 	
+	@EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+	public void onPlayerMove(PlayerMoveEvent event) {
+	    Player player = event.getPlayer();
+		PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
+		
+		Location source = event.getFrom();
+		Claim sourceClaim = this.dataStore.getClaimAt(source, false, playerData.lastClaim);
+		Location destination = event.getTo();
+		Claim destinationClaim = this.dataStore.getClaimAt(destination, false, null);
+    	
+		if(sourceClaim != destinationClaim) {
+			boolean srcpvp = sourceClaim == null || sourceClaim.siegeData != null;
+			boolean dstpvp = destinationClaim == null || destinationClaim.siegeData != null;
+			
+			String srcpvpmsg = srcpvp ?
+					ChatColor.YELLOW + " (" + ChatColor.RED + "PvP" + ChatColor.YELLOW + ")"
+					: ChatColor.YELLOW + " (" + ChatColor.GREEN + "Non-PvP" + ChatColor.YELLOW + ")";
+			String dstpvpmsg = dstpvp ?
+					ChatColor.YELLOW + " (" + ChatColor.RED + "PvP" + ChatColor.YELLOW + ")"
+					: ChatColor.YELLOW + " (" + ChatColor.GREEN + "Non-PvP" + ChatColor.YELLOW + ")";
+			if(sourceClaim != null && destinationClaim != null) {
+				Team srcpt = player.getScoreboard().getEntryTeam(sourceClaim.getOwnerName());
+				String srcclaimName;
+				if(srcpt != null) {
+					srcclaimName = srcpt.getColor() + srcpt.getDisplayName()
+							+ (sourceClaim.isTeamBase() ? " Main Base" + (sourceClaim.parent != null ? " Subclaim" : "") : " Outpost " + (sourceClaim.parent != null ? "Subclaim " : "") + "- " + sourceClaim.getOwnerName())
+							+ srcpvpmsg;
+				} else {
+					srcclaimName = ChatColor.GRAY + sourceClaim.getOwnerName() + "'s Base " + srcpvpmsg;
+				}
+				instance.sendMessage(player, ChatColor.YELLOW, "Leaving: " + srcclaimName);
+				Team dstpt = player.getScoreboard().getEntryTeam(destinationClaim.getOwnerName());
+				String dstclaimName;
+				if(dstpt != null) {
+					dstclaimName = dstpt.getColor() + dstpt.getDisplayName()
+							+ (destinationClaim.isTeamBase() ? " Main Base" + (destinationClaim.parent != null ? " Subclaim" : "") : " Outpost " + (destinationClaim.parent != null ? "Subclaim " : "") + "- " + destinationClaim.getOwnerName())
+							+ dstpvpmsg;
+				} else {
+					dstclaimName = ChatColor.GRAY + destinationClaim.getOwnerName() + "'s Base " + dstpvpmsg;
+				}
+				instance.sendMessage(player, ChatColor.YELLOW, "Entering: " + dstclaimName);
+			} else if(sourceClaim != null && destinationClaim == null) {
+				Team srcpt = player.getScoreboard().getEntryTeam(sourceClaim.getOwnerName());
+				String srcclaimName;
+				if(srcpt != null) {
+					srcclaimName = srcpt.getColor() + srcpt.getDisplayName()
+							+ (sourceClaim.isTeamBase() ? " Main Base" + (sourceClaim.parent != null ? " Subclaim" : "") : " Outpost " + (sourceClaim.parent != null ? "Subclaim " : "") + "- " + sourceClaim.getOwnerName())
+							+ srcpvpmsg;
+				} else {
+					srcclaimName = ChatColor.GRAY + sourceClaim.getOwnerName() + "'s Base " + srcpvpmsg;
+				}
+				instance.sendMessage(player, ChatColor.YELLOW, "Leaving: " + srcclaimName);
+				String dstclaimName = ChatColor.GRAY + "Wilderness" + dstpvpmsg;
+				instance.sendMessage(player, ChatColor.YELLOW, "Entering: " + dstclaimName);
+			} else if(sourceClaim == null && destinationClaim != null) {
+				String srcclaimName = ChatColor.GRAY + "Wilderness" + srcpvpmsg;
+				instance.sendMessage(player, ChatColor.YELLOW, "Leaving: " + srcclaimName);
+				Team dstpt = player.getScoreboard().getEntryTeam(destinationClaim.getOwnerName());
+				String dstclaimName;
+				if(dstpt != null) {
+					dstclaimName = dstpt.getColor() + dstpt.getDisplayName()
+							+ (destinationClaim.isTeamBase() ? " Main Base" + (destinationClaim.parent != null ? " Subclaim" : "") : " Outpost " + (destinationClaim.parent != null ? "Subclaim " : "") + "- " + destinationClaim.getOwnerName())
+							+ dstpvpmsg;
+				} else {
+					dstclaimName = ChatColor.GRAY + destinationClaim.getOwnerName() + "'s Base " + dstpvpmsg;
+				}
+				instance.sendMessage(player, ChatColor.YELLOW, "Entering: " + dstclaimName);
+			}
+		}
+	}
+	
 	//when a player teleports
 	@EventHandler(priority = EventPriority.LOWEST)
 	public void onPlayerTeleport(PlayerTeleportEvent event)
@@ -1067,6 +1142,7 @@ class PlayerEventHandler implements Listener
 		PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
 		
 		//FEATURE: prevent players from using ender pearls to gain access to secured claims
+		/* lol no, pearls good
 		TeleportCause cause = event.getCause();
 		if(cause == TeleportCause.CHORUS_FRUIT || (cause == TeleportCause.ENDER_PEARL && instance.config_claims_enderPearlsRequireAccessTrust))
 		{
@@ -1083,10 +1159,74 @@ class PlayerEventHandler implements Listener
 					    player.getInventory().addItem(new ItemStack(Material.ENDER_PEARL));
 				}
 			}
+		}*/
+
+		Location source = event.getFrom();
+		Claim sourceClaim = this.dataStore.getClaimAt(source, false, playerData.lastClaim);
+		Location destination = event.getTo();
+		Claim destinationClaim = this.dataStore.getClaimAt(destination, false, null);
+		
+		if(sourceClaim != destinationClaim) {
+			boolean srcpvp = sourceClaim == null || sourceClaim.siegeData != null;
+			boolean dstpvp = destinationClaim == null || destinationClaim.siegeData != null;
+			
+			String srcpvpmsg = srcpvp ?
+					ChatColor.YELLOW + " (" + ChatColor.RED + "PvP" + ChatColor.YELLOW + ")"
+					: ChatColor.YELLOW + " (" + ChatColor.GREEN + "Non-PvP" + ChatColor.YELLOW + ")";
+			String dstpvpmsg = dstpvp ?
+					ChatColor.YELLOW + " (" + ChatColor.RED + "PvP" + ChatColor.YELLOW + ")"
+					: ChatColor.YELLOW + " (" + ChatColor.GREEN + "Non-PvP" + ChatColor.YELLOW + ")";
+			if(sourceClaim != null && destinationClaim != null) {
+				Team srcpt = player.getScoreboard().getEntryTeam(sourceClaim.getOwnerName());
+				String srcclaimName;
+				if(srcpt != null) {
+					srcclaimName = srcpt.getColor() + srcpt.getDisplayName()
+							+ (sourceClaim.isTeamBase() ? " Main Base" + (sourceClaim.parent != null ? " Subclaim" : "") : " Outpost " + (sourceClaim.parent != null ? "Subclaim " : "") + "- " + sourceClaim.getOwnerName())
+							+ srcpvpmsg;
+				} else {
+					srcclaimName = ChatColor.GRAY + sourceClaim.getOwnerName() + "'s Base " + srcpvpmsg;
+				}
+				instance.sendMessage(player, ChatColor.YELLOW, "Leaving: " + srcclaimName);
+				Team dstpt = player.getScoreboard().getEntryTeam(destinationClaim.getOwnerName());
+				String dstclaimName;
+				if(dstpt != null) {
+					dstclaimName = dstpt.getColor() + dstpt.getDisplayName()
+							+ (destinationClaim.isTeamBase() ? " Main Base" + (destinationClaim.parent != null ? " Subclaim" : "") : " Outpost " + (destinationClaim.parent != null ? "Subclaim " : "") + "- " + destinationClaim.getOwnerName())
+							+ dstpvpmsg;
+				} else {
+					dstclaimName = ChatColor.GRAY + destinationClaim.getOwnerName() + "'s Base " + dstpvpmsg;
+				}
+				instance.sendMessage(player, ChatColor.YELLOW, "Entering: " + dstclaimName);
+			} else if(sourceClaim != null && destinationClaim == null) {
+				Team srcpt = player.getScoreboard().getEntryTeam(sourceClaim.getOwnerName());
+				String srcclaimName;
+				if(srcpt != null) {
+					srcclaimName = srcpt.getColor() + srcpt.getDisplayName()
+							+ (sourceClaim.isTeamBase() ? " Main Base" + (sourceClaim.parent != null ? " Subclaim" : "") : " Outpost " + (sourceClaim.parent != null ? "Subclaim " : "") + "- " + sourceClaim.getOwnerName())
+							+ srcpvpmsg;
+				} else {
+					srcclaimName = ChatColor.GRAY + sourceClaim.getOwnerName() + "'s Base " + srcpvpmsg;
+				}
+				instance.sendMessage(player, ChatColor.YELLOW, "Leaving: " + srcclaimName);
+				String dstclaimName = ChatColor.GRAY + "Wilderness" + dstpvpmsg;
+				instance.sendMessage(player, ChatColor.YELLOW, "Entering: " + dstclaimName);
+			} else if(sourceClaim == null && destinationClaim != null) {
+				String srcclaimName = ChatColor.GRAY + "Wilderness" + srcpvpmsg;
+				instance.sendMessage(player, ChatColor.YELLOW, "Leaving: " + srcclaimName);
+				Team dstpt = player.getScoreboard().getEntryTeam(destinationClaim.getOwnerName());
+				String dstclaimName;
+				if(dstpt != null) {
+					dstclaimName = dstpt.getColor() + dstpt.getDisplayName()
+							+ (destinationClaim.isTeamBase() ? " Main Base" + (destinationClaim.parent != null ? " Subclaim" : "") : " Outpost " + (destinationClaim.parent != null ? "Subclaim " : "") + "- " + destinationClaim.getOwnerName())
+							+ dstpvpmsg;
+				} else {
+					dstclaimName = ChatColor.GRAY + destinationClaim.getOwnerName() + "'s Base " + dstpvpmsg;
+				}
+				instance.sendMessage(player, ChatColor.YELLOW, "Entering: " + dstclaimName);
+			}
 		}
 		
 		//FEATURE: prevent teleport abuse to win sieges
-		
 		//these rules only apply to siege worlds only
 		if(!instance.config_siege_enabledWorlds.contains(player.getWorld())) return;
 		
@@ -1096,8 +1236,9 @@ class PlayerEventHandler implements Listener
 		//Ignore vanilla teleports (usually corrective teleports? See issue #210)
 		if(event.getCause() == TeleportCause.UNKNOWN) return;
 		
-		Location source = event.getFrom();
-		Claim sourceClaim = this.dataStore.getClaimAt(source, false, playerData.lastClaim);
+		//Ignore chorus/pearls cuz those are legit
+		if((event.getCause() == TeleportCause.CHORUS_FRUIT) || (event.getCause() == TeleportCause.ENDER_PEARL)) return;
+		
 		if(sourceClaim != null && sourceClaim.siegeData != null)
 		{
 			instance.sendMessage(player, TextMode.Err, Messages.SiegeNoTeleport);
@@ -1105,8 +1246,6 @@ class PlayerEventHandler implements Listener
 			return;
 		}
 		
-		Location destination = event.getTo();
-		Claim destinationClaim = this.dataStore.getClaimAt(destination, false, null);
 		if(destinationClaim != null && destinationClaim.siegeData != null)
 		{
 			instance.sendMessage(player, TextMode.Err, Messages.BesiegedNoTeleport);

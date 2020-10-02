@@ -42,6 +42,7 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.Sound;
 import org.bukkit.Statistic;
 import org.bukkit.World;
 import org.bukkit.World.Environment;
@@ -69,6 +70,7 @@ import me.ryanhamshire.GriefPrevention.events.PreventBlockBreakEvent;
 import me.ryanhamshire.GriefPrevention.events.SaveTrappedPlayerEvent;
 import me.ryanhamshire.GriefPrevention.metrics.MetricsHandler;
 import net.kjnine.smp.peacetime.SMPPeacetime;
+import net.kjnine.smp.pvpprotection.MSG;
 import net.kjnine.smp.pvpprotection.SMPPvPProtection;
 import net.milkbowl.vault.economy.Economy;
 
@@ -2142,8 +2144,10 @@ public class GriefPrevention extends JavaPlugin
 		//teambase
         else if(cmd.getName().equalsIgnoreCase("teambase"))
         {
-        	Claim claim = this.dataStore.getClaimAt(player.getLocation(), true /*ignore height*/, null);
-        	if(claim == null || !player.getUniqueId().equals(claim.ownerID) || claim.isAdminClaim()) {
+
+			PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
+        	Claim claim = this.dataStore.getClaimAt(player.getLocation(), true /*ignore height*/, playerData.lastClaim);
+        	if((claim == null || !player.getUniqueId().equals(claim.ownerID) || claim.isAdminClaim()) && !playerData.ignoreClaims) {
         		GriefPrevention.sendMessage(player, TextMode.Err, Messages.NotYourClaim);
         		return true;
         	}
@@ -2630,17 +2634,32 @@ public class GriefPrevention extends JavaPlugin
 			//confirmation message for attacker, warning message for defender
 			GriefPrevention.sendMessage(defender, TextMode.Warn, Messages.SiegeAlert, attacker.getName());
 			GriefPrevention.sendMessage(player, TextMode.Success, Messages.SiegeConfirmed, defender.getName());
+			MSG.send(defender, "&aFleeing will result in a &6-2 Point Penalty&a.");
+			
+			defender.playSound(defender.getLocation(), Sound.ENTITY_WOLF_GROWL, 2f, 2f);
+			defender.playSound(defender.getLocation(), Sound.ENTITY_WOLF_GROWL, 2f, 0f);
+			player.playSound(player.getLocation(), Sound.ENTITY_WOLF_GROWL, 2f, 2f);
+			player.playSound(player.getLocation(), Sound.ENTITY_WOLF_GROWL, 2f, 0f);
 			
 			if(defenderClaim.isTeamBase()) {
+				getServer().broadcastMessage(ChatColor.translateAlternateColorCodes('&', "&f&l!!! &r" + attTeam.getColor() + attTeam.getDisplayName()
+				+ " Team&7 has begun siege against &r" + defTeam.getColor() + defTeam.getDisplayName() + " Team&f &l!!!"));
 				for(String ent : defTeam.getEntries()) {
 					Player teammate = getServer().getPlayer(ent);
 					if(teammate != null) {
 						teammate.sendTitle(ChatColor.translateAlternateColorCodes('&', defTeam.getColor() + "&l!!! &6Under Siege" + defTeam.getColor() + "&l !!!"), "&eYour TeamBase is Under Siege", 5, 80, 20);
 					}
 				}
-			} else
+			} else {
+				getServer().broadcastMessage(ChatColor.translateAlternateColorCodes('&', "&f&l!!! &r" + attTeam.getColor() + attacker.getDisplayName()
+				+ " &7 has begun siege against &r" + defTeam.getColor() + defender.getDisplayName() + "&f &l!!!"));
 				defender.sendTitle(ChatColor.translateAlternateColorCodes('&', "&c&l!!! &6Under Siege&c&l !!!"), "&eYour Base is Under Siege", 5, 110, 20);
-			
+			}
+			for(Player p : GriefPrevention.instance.getServer().getOnlinePlayers()) {
+				if(defenderClaim.contains(p.getLocation(), true, false)) {
+					MSG.send(p, "&6&l!&4&l!&6&l! &cPvP is now enabled in this area (Under Siege) &6&l!&4&l!&6&l!");
+				}
+			}
 
 			return true;
 		}
